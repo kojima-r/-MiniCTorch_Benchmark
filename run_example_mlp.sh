@@ -1,5 +1,6 @@
 mkdir -p log
 
+export  MKL_NUM_THREADS=1
 
 
 for b in 2 4 6 8 16 32 64
