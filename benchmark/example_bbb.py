@@ -16,6 +16,7 @@ from sklearn.preprocessing   import StandardScaler
 
 import minictorch
 import os
+import argparse
 
 #fashion_mnist_train = datasets.FashionMNIST('./fmnist', train=True,  download=True,transform=transforms.ToTensor())
 #fashion_mnist_test  = datasets.FashionMNIST('./fmnist', train=False, download=True,transform=transforms.ToTensor())
@@ -26,9 +27,8 @@ import os
 DEVICE = 'cpu'
 img_size=8
 n_in=img_size*img_size
-CLASSES = 10
+n_out = 10
 SAMPLES = 3
-TEST_SAMPLES = 10
 
 
 def get_data():
@@ -140,27 +140,29 @@ class BayesianLinear(nn.Module):
         return F.linear(input, weight, bias)
 
 
-class Net(nn.Module):   #BayesianNetwork(nn.Module):
-    def __init__(self, samples=SAMPLES):
+class Net(nn.Module):
+    def __init__(self, num_layer, num_sample):
         super().__init__()
-        self.l1 = BayesianLinear(n_in, 64)
-        self.l2 = BayesianLinear(64, 64)
-        self.l3 = BayesianLinear(64, 10)
-        self.samples = samples
+        n_mid=32
+        self.l1 = BayesianLinear(n_in, n_mid)
+        self.linears = nn.ModuleList([BayesianLinear(n_mid,n_mid) for i in range(num_layer)])
+        self.l3 = BayesianLinear(n_mid, n_out)
+        self.num_sample = num_sample
 
-    def logsoftmax(self, x, sample=False):
+    def forward_(self, x, sample=False):
         x = x.view(-1, n_in)
         x = F.relu(self.l1(x, sample))
-        x = F.relu(self.l2(x, sample))
+        for l in self.linears:
+            x = F.relu(l(x,sample))
         x = F.log_softmax(self.l3(x, sample), dim=1)
         return x
 
-    def sampling(self, x, samples=SAMPLES ):
-      outputs = [] #torch.zeros(samples, BATCH_SIZE, CLASSES).to(DEVICE)
-      log_ps  = [] #torch.zeros(samples).to(DEVICE)
-      log_qs  = [] #torch.zeros(samples).to(DEVICE)
-      for i in range(samples):
-          outputs.append( self.logsoftmax(x, sample=True) )
+    def sampling(self, x, num_sample ):
+      outputs = []
+      log_ps  = []
+      log_qs  = []
+      for i in range(num_sample):
+          outputs.append( self.forward_(x, sample=True) )
           log_ps.append( self.log_p() )
           log_qs.append( self.log_q() )
       outputs = torch.stack(outputs)
@@ -169,15 +171,31 @@ class Net(nn.Module):   #BayesianNetwork(nn.Module):
       return outputs, log_ps, log_qs
 
     def log_p(self):
-        return self.l1.log_p + self.l2.log_p + self.l3.log_p
+        """
+        out=self.l1.log_p
+        for l in self.linears:
+            out += l.log_p
+        out+=self.l3.log_p
+        """
+        out=[self.l1.log_p,self.l3.log_p]
+        for l in self.linears:
+            out.append(l.log_p)
+        return torch.stack(out,dim=0).sum(dim=0)
 
     def log_q(self):
-        return self.l1.log_q + self.l2.log_q + self.l3.log_q
+        """
+        out=self.l1.log_q
+        for l in self.linears:
+            out += l.log_q
+        out+=self.l3.log_q
+        """
+        out=[self.l1.log_q,self.l3.log_q]
+        for l in self.linears:
+            out.append(l.log_q)
+        return torch.stack(out,dim=0).sum(dim=0)
 
     def forward(self, x, sample=False):
-       #return self.sampling( x, samples=self.samples )
-       outputs, log_ps, log_qs = self.sampling( x, samples=self.samples )
-       #return outputs, log_ps, log_qs
+       outputs, log_ps, log_qs = self.sampling( x, num_sample=self.num_sample )
        output = outputs.mean(0)
        log_p = log_ps.mean()
        log_q = log_qs.mean()
@@ -193,31 +211,27 @@ class Loss(nn.Module):  #BBBLoss(nn.Module):
      return loss
 
 class Model(nn.Module):  # Net(nn.Module)
-  def __init__(self, target, samples=SAMPLES):
+  def __init__(self, target, num_layer, num_sample):
     super().__init__()
-    self.samples = samples
-    self.net = Net()  #BayesianNetwork()
+    self.net = Net(num_layer, num_sample)
     self.net.train()
-    self.loss = Loss()  #BBBLoss()  loss_func
+    self.loss = Loss()
     self.target = target
-    #print("samples",samples)
     print("target",target)
 
   def forward(self, x):
-    #loss = self.loss_func( x, self.target, self.net )
     output, log_p, log_q = self.net( x )
     loss = self.loss( self.target, output, log_p, log_q )
     return loss
 
-
-def experiment():
+def experiment(args):
     x,y,vx,vy = get_data()
-    experiment_convert(x,y,vx,vy)
-    experiment_pytorch(x,y,vx,vy)
+    experiment_convert(x,y,vx,vy, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, num_layer=args.num_layer)
+    experiment_pytorch(x,y,vx,vy, batch_size=args.batch_size, epochs=args.epochs, num_layer=args.num_layer)
 
-def experiment_convert(x,y,vx,vy,batch_size=16):
+def experiment_convert(x,y,vx,vy,output_dir, batch_size=16, epochs=10, num_layer=2, num_sample=3):
     project = 'bbb'
-    folder = './example_bbb'
+    folder = output_dir
     os.makedirs(folder,exist_ok=True)
     json_path = folder + '/' + project +'.json'
 
@@ -226,26 +240,23 @@ def experiment_convert(x,y,vx,vy,batch_size=16):
     yb=y[:batch_size]
 
     with torch.no_grad():
-        model = Model(yb)  #Net(y)
+        model = Model(yb,num_layer, num_sample)
         minictorch.trace( model, xb, json_path )
-    minictorch.convert_all(project, folder, model, json_path, xb, {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=10, batch=batch_size, shuffle=False, seed=1, shape=0 )
+    minictorch.convert_all(project, folder, model, json_path, xb, {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=epochs, batch=batch_size, shuffle=False, seed=1, shape=0 )
 
-def experiment_pytorch(x,y,vx,vy,batch_size=16):
+def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=10, num_layer=2, num_sample=3):
     train_data=torch.utils.data.TensorDataset(x , y)
-    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True )
+    train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=False )
     num_batches = len(train_loader)
     ####
     #learning loop
-    model=Model(None)
+    model=Model(None,num_layer, num_sample)
     model.to(DEVICE)
     optimizer = optim.Adam(model.parameters())
 
     import time
     # 時間計測開始
     time_start = time.perf_counter()
-
-
-    epochs = 10
 
     for epoch in range(epochs):
       sum_loss=0
@@ -268,5 +279,27 @@ def experiment_pytorch(x,y,vx,vy,batch_size=16):
     print(torch.__config__.parallel_info())
 
 if __name__ == '__main__':
-    experiment()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=16,
+                        help='batch size')
+    parser.add_argument('--num_layer', type=int, default=2,
+                        help='num_layer')
+    parser.add_argument('--num_sample', type=int, default=3,
+                        help='number of samples')
+    parser.add_argument('--output_dir', type=str, default="./example_bbb",
+                        help='example_dir')
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='epochs')
+    parser.add_argument(
+        "--cpu", action="store_true", help="cpu mode (calcuration only with cpu)"
+    )
+    parser.add_argument(
+        "--gpu",
+        type=str,
+        default=None,
+        help="constraint gpus (default: all) (e.g. --gpu 0,2)",
+    )
 
+
+    args = parser.parse_args()
+    experiment(args)

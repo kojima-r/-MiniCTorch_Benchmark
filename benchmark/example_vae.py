@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import minictorch
 import os
+import argparse
 
 
 
@@ -18,10 +19,7 @@ import torch.distributions as td
 
 img_size = 8
 n_in = img_size * img_size
-n_mid = 16
 n_out = n_in
-n_z = 2
-n_batch = 32
 
 def get_data():
     digits_data = datasets.load_digits()
@@ -103,15 +101,15 @@ class VAE(torch.nn.Module):
     output = self.loss( y, x, q_z )
     return output
 
-def experiment():
+def experiment(args):
     x_train = get_data()
-    experiment_convert(x_train, batch_size=32)
-    experiment_pytorch(x_train, batch_size=32)
+    experiment_convert(x_train, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, n_mid=args.dim_mid, n_z=args.dim_z)
+    experiment_pytorch(x_train, batch_size=args.batch_size, epochs=args.epochs, n_mid=args.dim_mid, n_z=args.dim_z)
 
 
-def experiment_convert(x_train, batch_size=32):
+def experiment_convert(x_train, output_dir,batch_size=16, epochs=200 ,n_mid=32,n_z=2):
     project = 'vae'
-    folder = './example_vae'
+    folder = output_dir
     os.makedirs(folder,exist_ok=True)
     json_path = folder + '/' + project +'.json'
 
@@ -119,21 +117,18 @@ def experiment_convert(x_train, batch_size=32):
 
     x = x_train.clone().detach()
     torch.reshape( x, (-1,n_in) )
-    x = x[0:n_batch,:]
+    x = x[0:batch_size,:]
     model = VAE( n_in, n_mid, n_out, n_z )
     model.eval()
     with torch.no_grad():
         print("[SAVE]", json_path )
         minictorch.trace( model, x, json_path )
 
-    minictorch.convert_all( project, folder, model, json_path, x, {"input_data":x_train}, task_type="vae", epochs=200, batch=32, lr=0.001, z="fc3", shuffle=1 )
+    minictorch.convert_all( project, folder, model, json_path, x, {"input_data":x_train}, task_type="vae", epochs=epochs, batch=batch_size, lr=0.001, z="fc3", shuffle=1 )
 
-def experiment_pytorch(x_train, batch_size=32):
+def experiment_pytorch(x_train, batch_size=32, epochs=200,n_mid=32,n_z=2):
 
     torch.manual_seed( 1 )
-
-    epoch_num = 200
-    batch_size = 32
 
     vae = VAE( n_in, n_mid, n_out, n_z )
     vae.train()
@@ -152,7 +147,7 @@ def experiment_pytorch(x_train, batch_size=32):
     time_start = time.perf_counter()
 
 
-    for i in range(epoch_num):
+    for i in range(epochs):
 
         # -- 学習 --
         index_random = np.arange(len(x_train))
@@ -193,5 +188,27 @@ def experiment_pytorch(x_train, batch_size=32):
     print(torch.__config__.parallel_info())
 
 if __name__ == '__main__':
-    experiment()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=16,
+                        help='batch size')
+    parser.add_argument('--dim_mid', type=int, default=16,
+                        help='')
+    parser.add_argument('--dim_z', type=int, default=2,
+                        help='')
+    parser.add_argument('--output_dir', type=str, default="./example_vae",
+                        help='example_dir')
+    parser.add_argument('--epochs', type=int, default=100,
+                        help='epochs')
+    parser.add_argument(
+        "--cpu", action="store_true", help="cpu mode (calcuration only with cpu)"
+    )
+    parser.add_argument(
+        "--gpu",
+        type=str,
+        default=None,
+        help="constraint gpus (default: all) (e.g. --gpu 0,2)",
+    )
 
+
+    args = parser.parse_args()
+    experiment(args)

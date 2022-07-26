@@ -12,6 +12,7 @@ import minictorch
 
 import time
 import os
+import argparse
 
 
 from sklearn import datasets
@@ -27,19 +28,18 @@ n_out = 10
 
 
 class Net( torch.nn.Module ):
-    def __init__(self):
+    def __init__(self,num_layer):
         super().__init__()
         self.fc1 = nn.Linear(n_in, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, 64)
+        self.linears = nn.ModuleList([nn.Linear(64, 64) for i in range(num_layer)])
         #self.drop1 = nn.Dropout(0.5) ### drop
-        self.fc4 = nn.Linear(64, n_out)
+        self.fc2 = nn.Linear(64, n_out)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
+        for l in self.linears:
+            x = F.relu(l(x))
+        x = self.fc2(x)
         #self.x2 = self.drop1(self.x1)  ## drop
         #x = self.fc2(self.x2)
         return x
@@ -55,9 +55,9 @@ class Loss( torch.nn.Module ):
         return output
 
 class Model(torch.nn.Module):
-    def __init__( self, t ):
+    def __init__( self, t , num_layer):
         super( Model, self ).__init__()
-        self.net  = Net()
+        self.net  = Net( num_layer)
         self.loss = Loss()
         self.target = t
 
@@ -106,41 +106,39 @@ def get_data():
 
 
 
-def experiment():
+def experiment(args):
     x,y,vx,vy = get_data()
-    experiment_convert(x,y,vx,vy)
-    experiment_pytorch(x,y,vx,vy)
+    experiment_convert(x,y,vx,vy, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, num_layer=args.num_layer)
+    experiment_pytorch(x,y,vx,vy, batch_size=args.batch_size, epochs=args.epochs, num_layer=args.num_layer)
 
-def experiment_convert(x,y,vx,vy,batch_size=16):
+def experiment_convert(x,y,vx,vy,output_dir,batch_size=16, epochs=200, num_layer=2):
     project = 'mlp'
-    folder = './example_mlp'
+    folder = output_dir
     os.makedirs(folder,exist_ok=True)
     json_path = folder + '/' + project +'.json'
-    
+
     inputs = x[0:batch_size,:]
     targets = y[0:batch_size]
 
 
-    model = Model( targets )
+    model = Model( targets ,num_layer)
 
     model.eval()
     with torch.no_grad():
         print("[SAVE]", json_path )
         minictorch.trace( model, inputs, json_path )
 
-    minictorch.convert_all( project, folder, model, json_path, inputs, {"input_data":x, "target_data":y}, task_type="classification", batch=batch_size, shuffle=True )
+    minictorch.convert_all( project, folder, model, json_path, inputs, {"input_data":x, "target_data":y}, task_type="classification", epochs=epochs, batch=batch_size, shuffle=True )
     #####
 
-def experiment_pytorch(x,y,vx,vy,batch_size=16):
+def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=200,num_layer=2):
     torch.manual_seed( 1 )
 
     #inputs.requires_grad = True
-    model = Model( None )
+    model = Model( None ,num_layer)
 
     lr = 0.01
     opt = torch.optim.SGD( model.parameters(), lr)
-
-    epochs = 200
 
     num_train = len(x)
     n_batch = num_train // batch_size  # 1エポックあたりのバッチ数
@@ -173,20 +171,20 @@ def experiment_pytorch(x,y,vx,vy,batch_size=16):
             # 順伝播と逆伝播
             model.target = labels
             loss = model( inputs )
-            total_loss += float(loss);
+            total_loss += loss.item();
 
             # 正解数の合計を更新
             #_, preds = torch.max( model.out, 1 )
             preds = torch.argmax( model.out, dim=1 )
             num = torch.sum( preds == labels )
-            total_corrects += num
+            total_corrects += num.item()
 
             opt.zero_grad()
             loss.backward()
             opt.step()
 
-        total_acc  = total_corrects.double() / float(num_train)
-        print('Train Loss {}: {:.4f} Acc: {:.4f} {}'.format( epoch, total_loss, total_acc, total_corrects ))
+        total_acc  = total_corrects / float(num_train)
+        print('Train Loss {}: {:.4f} Acc: {:.4f} ({}/{})'.format( epoch, total_loss, total_acc, total_corrects ,num_train))
 
         epoch_loss.append( total_loss )
         epoch_acc.append( total_acc )
@@ -198,5 +196,28 @@ def experiment_pytorch(x,y,vx,vy,batch_size=16):
     print(torch.__config__.parallel_info())
 
 
+ 
+
 if __name__ == '__main__':
-    experiment()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=16,
+                        help='batch size')
+    parser.add_argument('--num_layer', type=int, default=2,
+                        help='num_layer')
+    parser.add_argument('--output_dir', type=str, default="./example_mlp",
+                        help='example_dir')
+    parser.add_argument('--epochs', type=int, default=200,
+                        help='epochs')
+    parser.add_argument(
+        "--cpu", action="store_true", help="cpu mode (calcuration only with cpu)"
+    )
+    parser.add_argument(
+        "--gpu",
+        type=str,
+        default=None,
+        help="constraint gpus (default: all) (e.g. --gpu 0,2)",
+    )
+
+
+    args = parser.parse_args()
+    experiment(args)
