@@ -108,7 +108,8 @@ def get_data():
 
 def experiment(args):
     x,y,vx,vy = get_data()
-    experiment_convert(x,y,vx,vy, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, num_layer=args.num_layer)
+    if not args.torch_exec:
+        experiment_convert(x,y,vx,vy, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, num_layer=args.num_layer)
     experiment_pytorch(x,y,vx,vy, batch_size=args.batch_size, epochs=args.epochs, num_layer=args.num_layer)
 
 def experiment_convert(x,y,vx,vy,output_dir,batch_size=16, epochs=200, num_layer=2):
@@ -208,6 +209,10 @@ if __name__ == '__main__':
                         help='example_dir')
     parser.add_argument('--epochs', type=int, default=200,
                         help='epochs')
+
+    parser.add_argument(
+        "--torch_exec", action="store_true", help="pytorch execution only"
+    )
     parser.add_argument(
         "--cpu", action="store_true", help="cpu mode (calcuration only with cpu)"
     )

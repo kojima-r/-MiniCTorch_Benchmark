@@ -103,7 +103,8 @@ class VAE(torch.nn.Module):
 
 def experiment(args):
     x_train = get_data()
-    experiment_convert(x_train, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, n_mid=args.dim_mid, n_z=args.dim_z)
+    if not args.torch_exec:
+        experiment_convert(x_train, output_dir=args.output_dir, epochs=args.epochs, batch_size=args.batch_size, n_mid=args.dim_mid, n_z=args.dim_z)
     experiment_pytorch(x_train, batch_size=args.batch_size, epochs=args.epochs, n_mid=args.dim_mid, n_z=args.dim_z)
 
 
@@ -199,6 +200,9 @@ if __name__ == '__main__':
                         help='example_dir')
     parser.add_argument('--epochs', type=int, default=100,
                         help='epochs')
+    parser.add_argument(
+        "--torch_exec", action="store_true", help="pytorch execution only"
+    )
     parser.add_argument(
         "--cpu", action="store_true", help="cpu mode (calcuration only with cpu)"
     )
