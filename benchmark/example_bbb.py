@@ -30,7 +30,6 @@ n_in=img_size*img_size
 n_out = 10
 SAMPLES = 3
 
-
 def get_data():
     digits_data = datasets.load_digits()
     dd = np.asarray( digits_data.data, dtype=np.float32 )
@@ -39,8 +38,6 @@ def get_data():
     dd /= 16
     data = dd
     target = digits_data.target
-
-
     # データ読み込み
     #iris = datasets.load_iris()
     #data   = iris['data']
@@ -69,10 +66,6 @@ def get_data():
     vy = torch.from_numpy(y_valid).long()
     return x,y,vx,vy
 
-
-
-
-
 class Gaussian(object):
     def __init__(self, mu, rho):
         super().__init__()
@@ -91,6 +84,7 @@ class Gaussian(object):
     def log_prob(self, input):
         return (- math.log(math.sqrt(2 * math.pi)) - torch.log(self.sigma)
                 - ((input - self.mu) ** 2) / (2 * self.sigma ** 2)).sum()
+
 class ScaleMixtureGaussian(object):
     def __init__(self, pi, sigma1, sigma2):
         super().__init__()
@@ -104,7 +98,6 @@ class ScaleMixtureGaussian(object):
         prob1 = torch.exp(self.gaussian1.log_prob(input))
         prob2 = torch.exp(self.gaussian2.log_prob(input))
         return (torch.log(self.pi * prob1 + (1-self.pi) * prob2)).sum()
-
 
 class BayesianLinear(nn.Module):
     def __init__(self, in_features, out_features):
@@ -206,8 +199,14 @@ class Loss(nn.Module):  #BBBLoss(nn.Module):
      super().__init__()
 
   def forward( self, target, output, log_p, log_q ):
-     nll = F.nll_loss( output, target, size_average=False )
+     #print("target:",target)
+     #print("output:",output)
+     #print("log_p :",log_p)
+     #print("log_q :",log_q)
+     nll = F.nll_loss( output, target, reduction='none' )
+     #print("nll   :",nll)
      loss = (log_q - log_p) + nll
+     #print("loss  :",loss)
      return loss
 
 class Model(nn.Module):  # Net(nn.Module)
@@ -217,7 +216,6 @@ class Model(nn.Module):  # Net(nn.Module)
     self.net.train()
     self.loss = Loss()
     self.target = target
-    print("target",target)
 
   def forward(self, x):
     output, log_p, log_q = self.net( x )
@@ -243,7 +241,7 @@ def experiment_convert(x,y,vx,vy,output_dir, batch_size=16, epochs=10, num_layer
     with torch.no_grad():
         model = Model(yb,num_layer, num_sample)
         minictorch.trace( model, xb, json_path )
-    minictorch.convert_all(project, folder, model, json_path, xb, {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=epochs, batch=batch_size, shuffle=False, seed=1, shape=0 )
+    minictorch.convert_all(project, folder, model, json_path, xb, {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=epochs, batch_size=batch_size, shuffle=False, seed=1, chk_shape=0 )
 
 def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=10, num_layer=2, num_sample=3):
     train_data=torch.utils.data.TensorDataset(x , y)
@@ -253,7 +251,9 @@ def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=10, num_layer=2, num_samp
     #learning loop
     model=Model(None,num_layer, num_sample)
     model.to(DEVICE)
-    optimizer = optim.Adam(model.parameters())
+    lr=0.001
+    optimizer = torch.optim.SGD( model.parameters(), lr)
+    #optimizer = optim.Adam(model.parameters())
 
     import time
     # 時間計測開始
@@ -267,6 +267,7 @@ def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=10, num_layer=2, num_samp
         model.zero_grad()
         model.target=target
         loss = model(data)
+        loss=torch.mean(loss)
         loss.backward()
         optimizer.step()
         sum_loss+=loss.item()

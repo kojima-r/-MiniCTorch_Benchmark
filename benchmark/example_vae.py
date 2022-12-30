@@ -11,8 +11,6 @@ import minictorch
 import os
 import argparse
 
-
-
 import torch.utils as utils
 from sklearn import datasets
 import torch.distributions as td
@@ -29,9 +27,6 @@ def get_data():
     dd /= 16
     x = torch.from_numpy(dd)
     return x
-
-
-
 
 class Net(torch.nn.Module):
     def __init__( self, n_in, n_mid, n_out, n_z ):
@@ -125,7 +120,7 @@ def experiment_convert(x_train, output_dir,batch_size=16, epochs=200 ,n_mid=32,n
         print("[SAVE]", json_path )
         minictorch.trace( model, x, json_path )
 
-    minictorch.convert_all( project, folder, model, json_path, x, {"input_data":x_train}, task_type="vae", epochs=epochs, batch=batch_size, lr=0.001, z="fc3", shuffle=1 )
+    minictorch.convert_all( project, folder, model, json_path, x, {"input_data":x_train}, task_type="vae", epochs=epochs, batch_size=batch_size, lr=0.001, latent_z="fc3", shuffle=1 )
 
 def experiment_pytorch(x_train, batch_size=32, epochs=200,n_mid=32,n_z=2):
 
@@ -147,9 +142,7 @@ def experiment_pytorch(x_train, batch_size=32, epochs=200,n_mid=32,n_z=2):
     # 時間計測開始
     time_start = time.perf_counter()
 
-
     for i in range(epochs):
-
         # -- 学習 --
         index_random = np.arange(len(x_train))
         np.random.shuffle(index_random)  # インデックスをシャッフルする
