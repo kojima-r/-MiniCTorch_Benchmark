@@ -129,7 +129,7 @@ def experiment_convert(x,y,vx,vy,output_dir,batch_size=16, epochs=200, num_layer
         print("[SAVE]", json_path )
         minictorch.trace( model, inputs, json_path )
 
-    minictorch.convert_all( project, folder, model, json_path, inputs, {"input_data":x, "target_data":y}, task_type="classification", epochs=epochs, batch_size=batch_size, shuffle=True )
+    minictorch.convert_all( project, folder, model, json_path, inputs, [("input","input_data")],{"input_data":x, "target_data":y}, task_type="classification", epochs=epochs, batch_size=batch_size, shuffle=True )
     #####
 
 def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=200,num_layer=2):

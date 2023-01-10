@@ -241,7 +241,7 @@ def experiment_convert(x,y,vx,vy,output_dir, batch_size=16, epochs=10, num_layer
     with torch.no_grad():
         model = Model(yb,num_layer, num_sample)
         minictorch.trace( model, xb, json_path )
-    minictorch.convert_all(project, folder, model, json_path, xb, {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=epochs, batch_size=batch_size, shuffle=False, seed=1, chk_shape=0 )
+    minictorch.convert_all(project, folder, model, json_path, xb,[("input","input_data")], {"input_data": x, "target_data":y}, code="all", task_type="classification", epochs=epochs, batch_size=batch_size, shuffle=False, seed=1, chk_shape=0 )
 
 def experiment_pytorch(x,y,vx,vy,batch_size=16, epochs=10, num_layer=2, num_sample=3):
     train_data=torch.utils.data.TensorDataset(x , y)

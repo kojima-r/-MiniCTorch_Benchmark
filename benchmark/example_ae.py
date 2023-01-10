@@ -105,7 +105,7 @@ def experiment_convert(x_train, output_dir,batch_size=16, epochs=200 ,n_mid=32,n
         print("[SAVE]", json_path )
         minictorch.trace( model, x, json_path )
 
-    minictorch.convert_all( project, folder, model, json_path, x, {"input_data":x_train}, task_type="ae", epochs=epochs, batch_size=batch_size, lr=0.001, z="fc3", shuffle=False )
+    minictorch.convert_all( project, folder, model, json_path, x,[("input","input_data")], {"input_data":x_train}, task_type="ae", epochs=epochs, batch_size=batch_size, lr=0.001, z="fc3", shuffle=False )
 
 def experiment_pytorch(x_train, batch_size=32, epochs=200,n_mid=32,n_z=2):
 
